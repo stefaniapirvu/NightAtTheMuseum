@@ -15,6 +15,10 @@ public class CameraSwitcher : MonoBehaviour
         activeCamera = topDownCamera;
         topDownCamera.enabled = true;
         behindCamera.enabled = false;
+
+        topDownCamera.GetComponent<AudioListener>().enabled = true;
+        behindCamera.GetComponent<AudioListener>().enabled = false;
+
     }
 
     void Update()
@@ -33,12 +37,20 @@ public class CameraSwitcher : MonoBehaviour
         {
             topDownCamera.enabled = false;
             behindCamera.enabled = true;
+
+            topDownCamera.GetComponent<AudioListener>().enabled = false;
+            behindCamera.GetComponent<AudioListener>().enabled = true;
+
             activeCamera = behindCamera;
         }
         else
         {
             behindCamera.enabled = false;
             topDownCamera.enabled = true;
+
+            behindCamera.GetComponent<AudioListener>().enabled = false;
+            topDownCamera.GetComponent<AudioListener>().enabled = true;
+
             activeCamera = topDownCamera;
         }
     }

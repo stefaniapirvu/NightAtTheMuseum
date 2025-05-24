@@ -5,57 +5,143 @@ using UnityEngine.AI;
 
 public class GuardAI : MonoBehaviour
 {
-    public Transform[] waypoints;
-    public float patrolSpeed = 2f;
-    public float waitTime = 3f; // Wait time at each waypoint
+    [SerializeField] float radius = 10.0f;
+    [SerializeField] List<GameObject> waypoint;
+    [SerializeField] int currentWaypoint = 0;
 
-    private NavMeshAgent agent;
-    private Animator animator;
-    private int currentWaypoint = 0;
-    private bool isWaiting = false;
+    [SerializeField] float walkSpeed = 3.5f;  
+    [SerializeField] float runSpeed = 6.0f;   
 
+    NavMeshAgent agent;
+    Animator animator;
+    private bool isInvestigatingGrenade = false;
+    private Vector3 grenadePosition;
+    private float investigationTimer = 0.0f;
+    private const float investigationDuration = 3.0f;  
+    private bool hasArrivedAtGrenade = false;
+    private GameObject grenadeObject;  
+
+    public GridManager gridManager;
+    private bool hasDetectedPlayer = false;
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
         animator = GetComponent<Animator>();
-
-        agent.speed = patrolSpeed;
-        MoveToNextWaypoint();
+        agent.speed = walkSpeed;
     }
 
     void Update()
     {
-        if (!isWaiting && !agent.pathPending && agent.remainingDistance < 0.1f)
+        if (isInvestigatingGrenade)
         {
-            StartCoroutine(IdlePause());
+            if (!hasArrivedAtGrenade)
+            {
+                if (Vector3.Distance(transform.position, grenadePosition) < 1.0f) 
+                {
+                    agent.isStopped = true;
+                    hasArrivedAtGrenade = true;
+                    investigationTimer = 0.0f;
+                    gridManager.UpdateQValue(grenadePosition, -1f);
+                }
+                animator.SetBool("isLooking", false);
+
+            }
+            else
+            {
+                Destroy(grenadeObject, investigationDuration);
+                investigationTimer += Time.deltaTime;
+
+                if (investigationTimer < investigationDuration)
+                {
+                    animator.SetBool("isRunning", false);
+                    animator.SetBool("isLooking", true);
+
+                    agent.speed = walkSpeed;
+                }
+                else
+                {
+                    isInvestigatingGrenade = false;
+                    hasArrivedAtGrenade = false;
+                    investigationTimer = 0.0f;
+                    agent.isStopped = false;  
+                    animator.SetBool("isLooking", false);
+
+
+                    if (Vector3.Distance(transform.position, PlayerMovement.instance.player.transform.position) < radius)
+                    {
+                        agent.SetDestination(PlayerMovement.instance.player.transform.position);
+                        animator.SetBool("isRunning", true);
+                        agent.speed = runSpeed;
+                    }
+                    else
+                    {
+                        agent.SetDestination(waypoint[currentWaypoint].transform.position);
+                        animator.SetBool("isRunning", false);
+                        agent.speed = walkSpeed;
+                    }
+                }
+            }
+        }
+        else
+        {
+            animator.SetBool("isLooking", false);
+
+            if (Vector3.Distance(transform.position, PlayerMovement.instance.player.transform.position) < radius)
+            {
+                if (!hasDetectedPlayer)
+                {
+                    gridManager.UpdateQValue(PlayerMovement.instance.player.transform.position, -1f);  // Update grid only once
+                    hasDetectedPlayer = true;  // Set flag to true so it doesn't update the grid again
+                }
+                FaceTarget();
+                agent.SetDestination(PlayerMovement.instance.player.transform.position);
+                agent.speed = runSpeed;  
+                animator.SetBool("isRunning", true);  
+            }
+            else
+            {
+                if (waypoint.Count == 0) return;
+
+                agent.SetDestination(waypoint[currentWaypoint].transform.position);
+
+                agent.speed = walkSpeed;  
+                animator.SetBool("isRunning", false); 
+
+                if (Vector3.Distance(transform.position, waypoint[currentWaypoint].transform.position) < 3.0f)
+                {
+                    currentWaypoint++;
+                    if (currentWaypoint >= waypoint.Count)
+                    {
+                        currentWaypoint = 0;
+                    }
+                }
+                if (hasDetectedPlayer)
+                {
+                    hasDetectedPlayer = false;  // Reset flag so that we can update the grid again if the player is detected later
+                }
+            }
         }
     }
 
-    void MoveToNextWaypoint()
+    public void GoToGrenade(Vector3 grenadeLocation, GameObject grenade)
     {
-        if (waypoints.Length == 0) return;
-
-        agent.SetDestination(waypoints[currentWaypoint].position);
-        animator.SetBool("isWalking", true);
-        animator.SetBool("isLooking", false);
-
-        currentWaypoint = (currentWaypoint + 1) % waypoints.Length;
+        isInvestigatingGrenade = true;
+        grenadePosition = grenadeLocation;
+        grenadeObject = grenade;  
+        agent.SetDestination(grenadePosition); 
+        hasArrivedAtGrenade = false;  
     }
 
-    IEnumerator IdlePause()
+    void FaceTarget()
     {
-        isWaiting = true;
+        Vector3 direction = (PlayerMovement.instance.player.transform.position - transform.position).normalized;
+        Quaternion lookRotation = Quaternion.LookRotation(new Vector3(direction.x, 0, direction.z));
+        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
+    }
 
-        agent.isStopped = true; // Stop the agent completely
-        animator.SetBool("isWalking", false);
-        animator.SetBool("isLooking", true);
-
-        yield return new WaitForSeconds(waitTime); // Wait for 3 seconds
-
-        animator.SetBool("isLooking", false);
-        agent.isStopped = false; // Resume movement
-        isWaiting = false;
-
-        MoveToNextWaypoint();
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, radius);
     }
 }

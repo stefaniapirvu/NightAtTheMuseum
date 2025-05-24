@@ -11,10 +11,10 @@ TagManager:
   - 
   - Water
   - UI
-  - 
-  - 
-  - 
-  - 
+  - Player
+  - Walls
+  - Guard
+  - Obstacle
   - 
   - 
   - 
